@@ -7,8 +7,13 @@ interface ScoresListProps {
 }
 
 export default function ScoresList({ scores }: ScoresListProps) {
-  const getCharityName = (charityId: string) => {
-    return CHARITIES.find((c) => c.id === charityId)?.name || 'Unknown'
+  // Handles both old string IDs ("1","2","3") and new uuid charity_id
+  const getCharityName = (score: GolfScore): string => {
+    const id = (score as any).charity ?? score.charity_id
+    if (!id) return 'No charity selected'
+    // Try matching against hardcoded list first (old string IDs)
+    const match = CHARITIES.find((c) => c.id === id || c.name === id)
+    return match?.name ?? 'Unknown'
   }
 
   return (
@@ -25,14 +30,17 @@ export default function ScoresList({ scores }: ScoresListProps) {
               className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
             >
               <div>
-                <p className="text-gray-600 text-sm">
-                  {formatDate(score.created_at)}
+                <p className="text-gray-700 font-medium text-sm">
+                  {formatDate((score as any).played_at ?? score.created_at)}
                 </p>
-                <p className="text-gray-600 text-sm">
-                  {getCharityName(score.charity_id ?? 'No charity selected')}
+                <p className="text-gray-500 text-sm mt-0.5">
+                  {getCharityName(score)}
                 </p>
               </div>
-              <p className="text-3xl font-bold text-blue-600">{score.score}</p>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-blue-600">{score.score}</p>
+                <p className="text-xs text-gray-400">Stableford</p>
+              </div>
             </div>
           ))}
         </div>

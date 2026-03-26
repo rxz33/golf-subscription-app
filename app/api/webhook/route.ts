@@ -48,6 +48,11 @@ export async function POST(request: NextRequest) {
             ).toISOString()
           : null;
 
+        if (!userId) {
+          console.error("❌ Missing userId in webhook");
+          break; // IMPORTANT: do NOT return inside switch
+        }
+
         await supabase.from("subscriptions").upsert(
           {
             user_id: userId,

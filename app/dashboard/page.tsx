@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import ScoreForm from "@/components/ScoreForm";
 import ScoresList from "@/components/ScoresList";
 import SubscriptionStatus from "@/components/SubscriptionStatus";
-import type { GolfScore, AuthUser } from "@/lib/types";
+import type { GolfScore, AuthUser, Subscription } from "@/lib/types";
 
 const DEFAULT_CHARITY = "1";
 const SUBSCRIPTION_STATUS = {
@@ -13,12 +13,18 @@ const SUBSCRIPTION_STATUS = {
   INACTIVE: "inactive",
 } as const;
 
-type SubscriptionStatus = (typeof SUBSCRIPTION_STATUS)[keyof typeof SUBSCRIPTION_STATUS];
+type SubscriptionStatus =
+  (typeof SUBSCRIPTION_STATUS)[keyof typeof SUBSCRIPTION_STATUS];
 
 export default function Dashboard() {
   const [user, setUser] = useState<Pick<AuthUser, "email"> | null>(null);
   const [scores, setScores] = useState<GolfScore[]>([]);
-  const [subscription, setSubscription] = useState<SubscriptionStatus>(SUBSCRIPTION_STATUS.ACTIVE);
+  const [subscription, setSubscription] = useState<SubscriptionStatus>(
+    SUBSCRIPTION_STATUS.ACTIVE,
+  );
+  const [subscriptionData, setSubscriptionData] = useState<Subscription | null>(
+    null,
+  );
   const [selectedCharity, setSelectedCharity] = useState(DEFAULT_CHARITY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +35,9 @@ export default function Dashboard() {
     const loadData = async () => {
       try {
         // Auth is guaranteed by layout — just fetch the user for display
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
         const [scoresRes, subRes, charityRes] = await Promise.all([
           fetch("/api/scores", { credentials: "include" }),
@@ -47,15 +55,22 @@ export default function Dashboard() {
           charityRes.json(),
         ]);
 
+        setSubscriptionData(subData.subscription ?? null);
+
         if (!cancelled) {
           setUser(user ? { email: user.email } : null);
           setScores(scoresData.scores ?? []);
-          setSubscription(subData.status ?? SUBSCRIPTION_STATUS.ACTIVE);
+          setSubscriptionData(subData.subscription ?? null);
+          setSubscription(
+            subData.subscription?.status ?? SUBSCRIPTION_STATUS.ACTIVE,
+          );
           setSelectedCharity(charityData.charity ?? DEFAULT_CHARITY);
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+          setError(
+            err instanceof Error ? err.message : "Failed to load dashboard.",
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -69,42 +84,52 @@ export default function Dashboard() {
     };
   }, []);
 
-  const handleAddScore = useCallback(async (score: number) => {
-    try {
-      const res = await fetch("/api/scores", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ score, charity: selectedCharity }),
-      });
+  const handleAddScore = useCallback(
+    async (score: number, playedAt: string) => {
+      try {
+        const res = await fetch("/api/scores", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            score,
+            charity_id: selectedCharity,
+            played_at: playedAt,
+          }),
+        });
+        if (!res.ok) throw new Error("Failed to add score.");
+        const data = await res.json();
+        setScores(data.scores);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to add score.");
+      }
+    },
+    [selectedCharity],
+  );
 
-      if (!res.ok) throw new Error("Failed to add score.");
+  const handleCharityChange = useCallback(
+    async (charityId: string) => {
+      const previous = selectedCharity;
+      setSelectedCharity(charityId);
 
-      const data = await res.json();
-      setScores(data.scores);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add score.");
-    }
-  }, [selectedCharity]);
+      try {
+        const res = await fetch("/api/charity", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ charity: charityId }),
+        });
 
-  const handleCharityChange = useCallback(async (charityId: string) => {
-    const previous = selectedCharity;
-    setSelectedCharity(charityId);
-
-    try {
-      const res = await fetch("/api/charity", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ charity: charityId }),
-      });
-
-      if (!res.ok) throw new Error("Failed to update charity.");
-    } catch (err) {
-      setSelectedCharity(previous);
-      setError(err instanceof Error ? err.message : "Failed to update charity.");
-    }
-  }, [selectedCharity]);
+        if (!res.ok) throw new Error("Failed to update charity.");
+      } catch (err) {
+        setSelectedCharity(previous);
+        setError(
+          err instanceof Error ? err.message : "Failed to update charity.",
+        );
+      }
+    },
+    [selectedCharity],
+  );
 
   const handleToggleSubscription = useCallback(async () => {
     const previous = subscription;
@@ -126,7 +151,9 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to update subscription.");
     } catch (err) {
       setSubscription(previous);
-      setError(err instanceof Error ? err.message : "Failed to update subscription.");
+      setError(
+        err instanceof Error ? err.message : "Failed to update subscription.",
+      );
     }
   }, [subscription]);
 
@@ -141,7 +168,6 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4">
-
         {error && (
           <div className="mb-6 flex items-center justify-between bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             <span>{error}</span>
@@ -169,6 +195,8 @@ export default function Dashboard() {
             <SubscriptionStatus
               status={subscription}
               onToggle={handleToggleSubscription}
+              currentPeriodEnd={subscriptionData?.current_period_end}
+              plan={subscriptionData?.plan}
             />
           </div>
 

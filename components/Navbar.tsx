@@ -7,10 +7,21 @@ import { useRouter } from 'next/navigation'
 
 export default function Navbar() {
   const [user, setUser] = useState<any>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user))
+    supabase.auth.getUser().then(async ({ data }) => {
+      setUser(data.user)
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', data.user.id)
+          .single()
+        setIsAdmin(profile?.is_admin ?? false)
+      }
+    })
   }, [])
 
   const handleSignOut = async () => {
@@ -27,6 +38,11 @@ export default function Navbar() {
           {user ? (
             <>
               <Link href="/dashboard" className="text-slate-300 hover:text-white transition">Dashboard</Link>
+              {isAdmin && (
+                <Link href="/admin" className="text-amber-400 hover:text-amber-300 font-semibold transition">
+                  Admin
+                </Link>
+              )}
               <button onClick={handleSignOut} className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg transition">
                 Sign out
               </button>

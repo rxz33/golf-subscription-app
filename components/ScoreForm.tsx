@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { CHARITIES } from '@/lib/utils'
 
 interface ScoreFormProps {
-  onAddScore: (score: number) => Promise<void>
+  onAddScore: (score: number, playedAt: string) => Promise<void>
   selectedCharity: string
   onCharityChange: (charityId: string) => Promise<void>
 }
@@ -15,26 +15,31 @@ export default function ScoreForm({
   onCharityChange,
 }: ScoreFormProps) {
   const [score, setScore] = useState('')
+  const [playedAt, setPlayedAt] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    const scoreNum = parseInt(score, 10)
+    if (!Number.isInteger(scoreNum) || scoreNum < 1 || scoreNum > 45) {
+      setError('Score must be a whole number between 1 and 45')
+      return
+    }
+
+    if (!playedAt) {
+      setError('Please select the date you played')
+      return
+    }
+
     setLoading(true)
-
     try {
-      const scoreNum = parseInt(score, 10)
-
-      if (!Number.isInteger(scoreNum) || scoreNum < 1 || scoreNum > 45) {
-        setError('Score must be a whole number between 1 and 45')
-        setLoading(false)
-        return
-      }
-
-      await onAddScore(scoreNum)
+      await onAddScore(scoreNum, playedAt)
       setScore('')
-    } catch (err) {
+      setPlayedAt(new Date().toISOString().split('T')[0])
+    } catch {
       setError('Failed to add score')
     } finally {
       setLoading(false)
@@ -53,10 +58,11 @@ export default function ScoreForm({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-gray-700 font-semibold mb-2">
+          <label htmlFor="score" className="block text-gray-700 font-semibold mb-2">
             Score (1-45)
           </label>
           <input
+            id="score"
             type="number"
             min="1"
             max="45"
@@ -69,10 +75,26 @@ export default function ScoreForm({
         </div>
 
         <div>
-          <label className="block text-gray-700 font-semibold mb-2">
+          <label htmlFor="playedAt" className="block text-gray-700 font-semibold mb-2">
+            Date Played
+          </label>
+          <input
+            id="playedAt"
+            type="date"
+            value={playedAt}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={(e) => setPlayedAt(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="charity" className="block text-gray-700 font-semibold mb-2">
             Support Charity
           </label>
           <select
+            id="charity"
             value={selectedCharity}
             onChange={(e) => onCharityChange(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"

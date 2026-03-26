@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import Stripe from "stripe";
 
-const VALID_STATUSES = ["active", "inactive"] as const;
-type SubscriptionStatus = (typeof VALID_STATUSES)[number];
+const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!);
 
 function makeSupabaseWithResponse(response: NextResponse) {
   const cookieStore = cookies();
@@ -29,56 +29,40 @@ export async function GET() {
 
   try {
     const supabase = makeSupabaseWithResponse(response);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", user.id)
-      .single();
+    // 🔥 Get subscriptions from Stripe
+    const subscriptions = await stripe.subscriptions.list({
+      status: "active",
+      limit: 10,
+      expand: ["data.customer"],
+    });
 
-    if (error && error.code !== "PGRST116") throw error;
+    // 🔍 Find subscription for this user
+    const activeSub = subscriptions.data.find((sub) => {
+      const customer = sub.customer as any;
+      return customer?.email === user.email;
+    });
 
-    return NextResponse.json({ status: data?.status ?? "active" });
+    return NextResponse.json({
+      status: activeSub ? "active" : "inactive",
+      subscription: activeSub ?? null,
+    });
   } catch (err) {
     console.error("[GET /api/subscription]", err);
-    return NextResponse.json({ error: "Failed to fetch subscription" }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  const response = NextResponse.next();
-
-  try {
-    const supabase = makeSupabaseWithResponse(response);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { status }: { status: SubscriptionStatus } = await request.json();
-
-    if (!VALID_STATUSES.includes(status)) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-    }
-
-    const { error } = await supabase
-      .from("subscriptions")
-      .upsert(
-        { user_id: user.id, status, updated_at: new Date().toISOString() },
-        { onConflict: "user_id" }
-      );
-
-    if (error) throw error;
-
-    return NextResponse.json({ status });
-  } catch (err) {
-    console.error("[POST /api/subscription]", err);
-    return NextResponse.json({ error: "Failed to update subscription" }, { status: 500 });
+    return NextResponse.json(
+      {
+        status: "inactive",
+        subscription: null,
+        error: "Failed to fetch subscription",
+      },
+      { status: 500 }
+    );
   }
 }
