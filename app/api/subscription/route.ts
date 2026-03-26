@@ -68,3 +68,47 @@ export async function GET() {
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  const response = NextResponse.next();
+
+  try {
+    const supabase = makeSupabaseWithResponse(response);
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { status } = await request.json();
+
+    if (!["active", "inactive"].includes(status)) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    // Update subscription in DB
+    const { error } = await supabase
+      .from("subscriptions")
+      .upsert(
+        {
+          user_id: user.id,
+          status,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (error) throw error;
+
+    return NextResponse.json({ status });
+  } catch (err) {
+    console.error("[POST /api/subscription]", err);
+    return NextResponse.json(
+      { error: "Failed to update subscription" },
+      { status: 500 }
+    );
+  }
+}
