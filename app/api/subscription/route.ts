@@ -5,24 +5,24 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!);
+const stripe = new Stripe(process.env["STRIPE_SECRET_KEY"]!);
 
 function makeSupabaseWithResponse(response: NextResponse) {
   const cookieStore = cookies();
 
   return createServerClient(
-    process.env['NEXT_PUBLIC_SUPABASE_URL']!,
-    process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
+    process.env["NEXT_PUBLIC_SUPABASE_URL"]!,
+    process.env["NEXT_PUBLIC_SUPABASE_ANON_KEY"]!,
     {
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, options),
           );
         },
       },
-    }
+    },
   );
 }
 
@@ -39,22 +39,14 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 🔥 Get subscriptions from Stripe
-    const subscriptions = await stripe.subscriptions.list({
-      status: "active",
-      limit: 10,
-      expand: ["data.customer"],
-    });
-
-    // 🔍 Find subscription for this user
-    const activeSub = subscriptions.data.find((sub) => {
-      const customer = sub.customer as any;
-      return customer?.email === user.email;
-    });
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
     return NextResponse.json({
-      status: activeSub ? "active" : "inactive",
-      subscription: activeSub ?? null,
+      status: data?.status ?? "inactive",
     });
   } catch (err) {
     console.error("[GET /api/subscription]", err);
@@ -64,7 +56,7 @@ export async function GET() {
         subscription: null,
         error: "Failed to fetch subscription",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -90,16 +82,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Update subscription in DB
-    const { error } = await supabase
-      .from("subscriptions")
-      .upsert(
-        {
-          user_id: user.id,
-          status,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
+    const { error } = await supabase.from("subscriptions").upsert(
+      {
+        user_id: user.id,
+        status,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
 
     if (error) throw error;
 
@@ -108,7 +98,7 @@ export async function POST(request: NextRequest) {
     console.error("[POST /api/subscription]", err);
     return NextResponse.json(
       { error: "Failed to update subscription" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

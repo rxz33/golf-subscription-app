@@ -16,26 +16,9 @@ export default function Navbar() {
       setUser(currentUser);
 
       if (currentUser) {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("is_admin")
-          .eq("id", currentUser.id)
-          .maybeSingle();
-
-        if (!profile) {
-          await supabase.from("profiles").insert({
-            id: currentUser.id,
-            email: currentUser.email,
-          });
-          setIsAdmin(false);
-        } else {
-          setIsAdmin(profile.is_admin ?? false);
-        }
-
-        // optional: log errors for debugging
-        if (error) {
-          console.error("Profile fetch error:", error);
-        }
+        const res = await fetch("/api/profile");
+        const json = await res.json();
+        setIsAdmin(json.isAdmin);
       }
     });
   }, []);
