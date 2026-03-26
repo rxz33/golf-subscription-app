@@ -29,7 +29,7 @@ export default function ScoresList({ scores }: ScoresListProps) {
                   {formatDate(score.created_at)}
                 </p>
                 <p className="text-gray-600 text-sm">
-                  {getCharityName(score.charity)}
+                  {getCharityName(score.charity_id ?? 'No charity selected')}
                 </p>
               </div>
               <p className="text-3xl font-bold text-blue-600">{score.score}</p>
